@@ -19,3 +19,6 @@
                       // UltiMachine Einsy and Archim2 boards use 0.2
                       // Panucatt BSD2660 uses 0.1
                       // Watterott TMC5160 uses 0.075
+
+const char* ssid = "Unifi";
+const char* password = "68sM69cD01aM02dM";

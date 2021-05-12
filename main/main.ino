@@ -162,6 +162,12 @@ void setup() {
   driver.sedn(0b01);
   driver.SGTHRS(STALL_VALUE);
 
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(1000);
+    Serial.println("Establishing connection to WiFi..");
+  }
+
   homeBlind();
   delay(1000);
   moveDown(FULL_LENGTH);
