@@ -16,6 +16,7 @@
  */
 #include <TMCStepper.h>
 #include <WiFi.h>
+#include <PubSubClient.h>
 
 #include "Config.h"
 
@@ -35,10 +36,65 @@ using namespace TMC2208_n;
 bool shaft = false;
 bool homed = false;
 int Position = 0;
+int StepsPerPercent = FULL_LENGTH / 100;
+int TargetPercent = 0;
+
+unsigned long previousMillis = 0;
+unsigned long previousConnectMillis = 0;
+unsigned long currentMillis;
+
+WiFiClient espClient;
+PubSubClient client(espClient);
 
 
-void BackgroundThread() {
-  
+void reconnect() {
+  // Loop until we're reconnected
+  if (!client.connected()) {
+    Serial.println("Info: Attempting MQTT connection");
+    String clientId = "Blind";
+    // Attempt to connect
+    if (client.connect(clientId.c_str(), MQTT_USER, MQTT_PASS)) {
+      Serial.println("Info: MQTT Connected");
+      client.subscribe(CONTROL_TOPIC);
+      client.subscribe(COMMAND_TOPIC);
+      Serial.println("Info: Subscribed to Control Topic");
+      client.publish(STATE_TOPIC, String(100 - (Position / StepsPerPercent)).c_str(), true);
+    } else {
+      Serial.print("Error: MQTT Connection Failed, rc=");
+      Serial.println(client.state());
+    }
+  }
+}
+
+void callback(char* topic, byte* payload, unsigned int length) {
+  Serial.print("Info: MQTT Message arrived [");
+  Serial.print(topic);
+  Serial.print("] ");
+  String message = "";
+  for (int i = 0; i < length; i++) {
+    message += (char)payload[i];
+  }
+  Serial.println(message);
+
+  if ((String)topic == CONTROL_TOPIC) {
+    Serial.println(message);
+    TargetPercent = 100 - message.toInt();
+  }
+  else if ((String)topic == COMMAND_TOPIC) {
+    Serial.println(message);
+    if (message == "OPEN")
+    {
+      TargetPercent = 0;
+    }
+    else if (message == "CLOSE")
+    {
+      TargetPercent = 100;
+    }
+    else if (message == "STOP")
+    {
+      TargetPercent = Position / StepsPerPercent;
+    }
+  }
 }
 
 void homeBlind() {
@@ -57,7 +113,6 @@ void homeBlind() {
         delayMicroseconds(80);
         digitalWrite(STEP_PIN, LOW);
         delayMicroseconds(80);
-        BackgroundThread();
     }
     int result = driver.SG_RESULT();
     Serial.println(result);
@@ -133,7 +188,6 @@ void moveDown(int steps) {
   Serial.println(Position);
 }
 
-
 void setup() {
   Serial.begin(115200);         // Init serial port and set baudrate
   while(!Serial);               // Wait for serial port to connect
@@ -163,20 +217,29 @@ void setup() {
   driver.SGTHRS(STALL_VALUE);
 
   WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(1000);
-    Serial.println("Establishing connection to WiFi..");
-  }
+
+  client.setServer(mqtt_server, 1883);
+  client.setCallback(callback);
+
+  Serial.println("Info: Setup Finished");
 
   homeBlind();
   delay(1000);
-  moveDown(FULL_LENGTH);
+
+  /*for (int i = 0; i < 100; i++)
+  {
+    moveDown(1*StepsPerPercent);
+  }
+  delay(1000);
+  moveUp(1*StepsPerPercent);
+  delay(1000);
+  moveDown(1*StepsPerPercent);
   delay(1000);
   moveUp(FULL_LENGTH/2);
   delay(1000);
   moveDown(FULL_LENGTH/2);
   delay(1000);
-  moveUp(FULL_LENGTH);
+  moveUp(FULL_LENGTH);*/
     
 }
 
@@ -184,5 +247,25 @@ bool closeBlind = true;
 bool finished = false;
 
 void loop() {
-  BackgroundThread();
+  currentMillis = millis();
+  if (!client.connected()) {
+    if (currentMillis - previousConnectMillis > 5000) {
+      reconnect();
+      previousConnectMillis = currentMillis;
+    }
+  }
+  else {
+    client.loop();
+  }
+
+  if (Position / StepsPerPercent > TargetPercent)
+  {
+    moveUp(StepsPerPercent);
+    client.publish(STATE_TOPIC, String(100 - (Position / StepsPerPercent)).c_str(), true);
+  }
+  else if (Position / StepsPerPercent < TargetPercent)
+  {
+    moveDown(StepsPerPercent);
+    client.publish(STATE_TOPIC, String(100 - (Position / StepsPerPercent)).c_str(), true);
+  }
 }
