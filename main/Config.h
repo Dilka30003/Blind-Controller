@@ -20,13 +20,5 @@
                       // Panucatt BSD2660 uses 0.1
                       // Watterott TMC5160 uses 0.075
 
-#define MQTT_USER "admin"
-#define MQTT_PASS "Terrara96"
-
-#define CONTROL_TOPIC "home/dhiluka/blind/set_position"
-#define COMMAND_TOPIC "home/dhiluka/blind/command"
-#define STATE_TOPIC "home/dhiluka/blind/position"
-
-const char* ssid = "Unifi";
-const char* password = "68sM69cD01aM02dM";
-const char* mqtt_server = "192.168.1.12";
+const char* ssid = "ssid";
+const char* password = "password";
